@@ -9,7 +9,7 @@ defmodule DockerTest.Application do
     # List all child processes to be supervised
     children = [
       # Start the Ecto repository
-      #DockerTest.Repo,
+      DockerTest.Repo,
       # Start the endpoint when the application starts
       DockerTestWeb.Endpoint
       # Starts a worker by calling: DockerTest.Worker.start_link(arg)

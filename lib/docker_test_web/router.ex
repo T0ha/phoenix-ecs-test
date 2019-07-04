@@ -1,6 +1,7 @@
 defmodule DockerTestWeb.Router do
   use DockerTestWeb, :router
 
+
   pipeline :browser do
     plug :accepts, ["html"]
     plug :fetch_session
@@ -17,6 +18,7 @@ defmodule DockerTestWeb.Router do
     pipe_through :browser
 
     get "/", PageController, :index
+    resources "/users", UserController
   end
 
   # Other scopes may use custom stacks.
