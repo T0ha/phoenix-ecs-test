@@ -1,0 +1,287 @@
+Description: 'Scalable architecture for Phoenix app with CI'
+Parameters:
+    Domain:
+        Type: String
+        Description: Custom domain for app
+    BranchName:
+        Type: String
+        Description: Repositiry branch name for build
+        Default: master
+    DBPasswd:
+        Type: String
+        Description: Password for DB master user
+        Default: P4ssw0rd
+
+Resources:
+    RDS:
+        Type: 'AWS::RDS::DBInstance'
+        DeletionPolicy: Snapshot
+        Properties:
+            DBInstanceIdentifier: !Join ['-', !Split ['.', !Ref Domain ]]
+            DBInstanceClass: db.t2.micro
+            Engine: postgres
+            EngineVersion: "10.6"
+            MultiAZ: false
+            DBName: !Join ['_', !Split ['.', !Ref Domain ]]
+            MasterUsername: phoenix
+            MasterUserPassword: !Ref DBPasswd
+            PubliclyAccessible: true
+            AllocatedStorage: 20
+            StorageType: gp2
+
+            #    S3ForUploads:
+            #        Type: 'AWS::S3::Bucket'
+            #        Properties:
+            #            BucketName: !Ref Domain
+            #            AccessControl: PublicRead
+            #            WebsiteConfiguration:
+            #                IndexDocument: index.html
+            #                ErrorDocument: error404.html
+            #
+            #    S3HostingPolicy:
+            #        Type: AWS::S3::BucketPolicy
+            #        Properties:
+            #            Bucket: !Ref S3ForUploads
+            #            PolicyDocument:
+            #                Statement:
+            #                    - Action:
+            #                        - "s3:GetObject"
+            #                      Effect: "Allow"
+            #                      Resource: !Join [ '/', [!GetAtt [S3ForUploads, Arn], "*"]]
+            #                      Principal: "*"
+            #
+            #    WebsiteCDN:
+            #        Type: 'AWS::CloudFront::Distribution'
+            #        DependsOn:
+            #            - S3ForUploads
+            #            - WebSSLACM
+            #        Properties:
+            #            DistributionConfig:
+            #                Aliases:
+            #                    - !Ref Domain
+            #                ViewerCertificate:
+            #                    AcmCertificateArn: !Ref WebSSLACM
+            #                    SslSupportMethod: sni-only
+            #
+            #                DefaultRootObject: index.html
+            #                PriceClass: PriceClass_100
+            #                Origins:
+            #                    - DomainName: !GetAtt [S3ForUploads, DomainName]
+            #                      Id: S3ForUploads
+            #                      S3OriginConfig: {}
+            #                Enabled: 'true'
+            #                DefaultCacheBehavior:
+            #                    TargetOriginId: S3ForUploads
+            #                    ForwardedValues:
+            #                        QueryString: 'true'
+            #                    ViewerProtocolPolicy: redirect-to-https
+            #                    Compress: 'true'
+            #
+            #    WebSSLACM:
+            #        Type: AWS::CertificateManager::Certificate
+            #        Properties:
+            #            DomainName: !Ref Domain
+            #            ValidationMethod: DNS
+
+            #    Pipeline:
+            #        Type: AWS::CodePipeline::Pipeline
+            #        Properties:
+            #            ArtifactStore:
+            #                Location: !Ref 'ArtifactStoreBucket'
+            #                Type: S3
+            #            Name: !Ref Domain
+            #            RoleArn: !GetAtt [PiplineRole, Arn]
+            #            Stages:
+            #                - Name: GetSources
+            #                  Actions:
+            #                      - Name: GetSource
+            #                        ActionTypeId:
+            #                            Category: Source
+            #                            Provider: CodeCommit
+            #                            Owner: AWS
+            #                            Version: 1
+            #                        Configuration:
+            #                            BranchName: !Ref BranchName
+            #                            RepositoryName: !Ref Domain
+            #                            PollForSourceChanges: false
+            #                        OutputArtifacts:
+            #                            - Name: SourceOutput
+            #                        RunOrder: 1
+            #                - Name: Build
+            #                  Actions:
+            #                      - Name: BuildSources
+            #                        InputArtifacts:
+            #                            - Name: SourceOutput
+            #                        ActionTypeId:
+            #                            Category: Build
+            #                            Owner: AWS
+            #                            Version: 1
+            #                            Provider: CodeBuild
+            #                        Configuration:
+            #                            ProjectName: !Ref CodeBuild
+            #                        OutputArtifacts:
+            #                            - Name: BuildOutput
+            #                        RunOrder: 1
+            #
+            #                - Name: Deploy
+            #                  Actions:
+            #                      - Name: DeployToS3
+            #                        InputArtifacts:
+            #                            - Name: BuildOutput
+            #                        ActionTypeId:
+            #                            Category: Deploy
+            #                            Owner: AWS
+            #                            Version: 1
+            #                            Provider: S3
+            #                        Configuration:
+            #                            BucketName: !Ref S3ForUploads
+            #                            Extract: true
+            #                        RunOrder: 1
+            #
+            #    CodeCommit:
+            #        Type: AWS::CodeCommit::Repository
+            #        DeletionPolicy: Retain
+            #        Properties:
+            #            RepositoryName: !Ref Domain
+            #            RepositoryDescription: Git repositioy for static site source code
+            #
+            #    CodeBuild:
+            #        Type: AWS::CodeBuild::Project
+            #        Properties:
+            #            Name: !Join ['_', !Split ['.', !Ref Domain ]]
+            #            Description: Builds static site from hyde and elm sources
+            #            Artifacts:
+            #                Type: CODEPIPELINE
+            #            Environment:
+            #                ComputeType: BUILD_GENERAL1_SMALL
+            #                Image: aws/codebuild/standard:2.0
+            #                Type: LINUX_CONTAINER
+            #            Source:
+            #                Type: CODEPIPELINE
+            #                BuildSpec: aws/buildspec.yml
+            #            ServiceRole: !Ref CodeBuildRole
+            #            LogsConfig:
+            #                CloudWatchLogs:
+            #                    Status: ENABLED
+            #                S3Logs:
+            #                    Status: DISABLED
+            #
+            #    ArtifactStoreBucket:
+            #        Type: 'AWS::S3::Bucket'
+            #        Properties:
+            #            BucketName: !Join [-, [ !Ref Domain, artifacts]]
+            #            VersioningConfiguration:
+            #                Status: Enabled
+            #
+            #    CloudWatchPipelineTrigger:
+            #        Type: AWS::Events::Rule
+            #        Properties:
+            #            Name: !Join ['-', [!Ref Domain, "pipeline-trigger"]]
+            #            Description: Starts pipeline when new code is pushed
+            #            EventPattern:
+            #                source:
+            #                    - aws.codecommit
+            #                detail-type:
+            #                    - "CodeCommit Repository State Change"
+            #                resources:
+            #                    - !GetAtt [CodeCommit, Arn]
+            #                detail:
+            #                    event:
+            #                        - referenceCreated
+            #                        - referenceUpdated
+            #                    referenceType:
+            #                        - branch
+            #                    referenceName:
+            #                        - master
+            #
+            #            State: ENABLED
+            #            Targets:
+            #                - Arn: !Join [':', [ 'arn:aws:codepipeline', !Ref "AWS::Region", !Ref "AWS::AccountId", !Ref Pipeline]]
+            #                  Id: !Ref Pipeline
+            #                  RoleArn: !GetAtt [CloudWatchRloe, Arn]
+            #
+            #
+            #    PiplineRole:
+            #        Type: AWS::IAM::Role
+            #        Properties:
+            #            AssumeRolePolicyDocument:
+            #                Statement:
+            #                    - Action: ['sts:AssumeRole']
+            #                      Effect: Allow
+            #                      Principal:
+            #                          Service: [codepipeline.amazonaws.com]
+            #                Version: '2012-10-17'
+            #            Path: /
+            #            Policies:
+            #                - PolicyName: CodePipelineAccess
+            #                  PolicyDocument:
+            #                      Version: '2012-10-17'
+            #                      Statement:
+            #                          - Action:
+            #                              - 's3:*'
+            #                              - 'codecommit:*'
+            #                              - 'codebuild:*'
+            #                              - 'logs:CreateLogStream'
+            #                              - 'iam:PassRole'
+            #                              - 'sns:Publish'
+            #                            Effect: Allow
+            #                            Resource: '*'
+            #    CodeBuildRole:
+            #        Type: AWS::IAM::Role
+            #        Properties:
+            #            AssumeRolePolicyDocument:
+            #                Statement:
+            #                    - Action: ['sts:AssumeRole']
+            #                      Effect: Allow
+            #                      Principal:
+            #                          Service: [codebuild.amazonaws.com]
+            #                Version: '2012-10-17'
+            #            Path: /
+            #            Policies:
+            #                - PolicyName: CodeBuildAccess
+            #                  PolicyDocument:
+            #                      Version: '2012-10-17'
+            #                      Statement:
+            #                          - Action:
+            #                              - 's3:*'
+            #                              - 'logs:*'
+            #                              - 'iam:PassRole'
+            #                              - 'sns:Publish'
+            #                            Effect: Allow
+            #                            Resource: '*'
+            #    CloudWatchRloe:
+            #        Type: AWS::IAM::Role
+            #        Properties:
+            #            AssumeRolePolicyDocument:
+            #                Statement:
+            #                    - Action: ['sts:AssumeRole']
+            #                      Effect: Allow
+            #                      Principal:
+            #                          Service: [events.amazonaws.com]
+            #                Version: '2012-10-17'
+            #            Path: /
+            #            Policies:
+            #                - PolicyName: CodePipelineEventsSend
+            #                  PolicyDocument:
+            #                      Version: '2012-10-17'
+            #                      Statement:
+            #                          - Action:
+            #                              - 'events:PutEvents'
+            #                              - 'codepipeline:StartPipelineExecution'
+            #                            Effect: Allow
+            #                            Resource: '*'
+            #                            #Route53Zone:
+            #                            #    Type: AWS::Route53::HostedZone
+            #                            #    Properties:
+            #                            #        Name: !Ref Domain
+            #
+            #    Route53Domain:
+            #        Type: AWS::Route53::RecordSet
+            #        DependsOn: WebsiteCDN
+            #        Properties:
+            #            HostedZoneName: !Join ['', [!Ref Domain, '.']]
+            #            Type: A
+            #            Name: !Ref Domain
+            #            AliasTarget:
+            #                DNSName: !GetAtt [ WebsiteCDN, DomainName]
+            #                HostedZoneId: Z2FDTNDATAQYW2
